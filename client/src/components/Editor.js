@@ -450,30 +450,35 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
     
     const processedFilename = `processed-${file.originalName}`;
     
-    await axios.post(
-      `/api/save-processed?filename=${encodeURIComponent(processedFilename)}&originalName=${encodeURIComponent(file.originalName)}`,
-      blob,
-      {
-        headers: {
-          'Content-Type': 'application/octet-stream',
-        },
-        withCredentials: true,
-      }
-    );
+    // Create download link for client-side download
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = processedFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
     onFileProcessed({
       filename: processedFilename,
       originalName: file.originalName,
+      blob: blob,
+      url: url
     });
   };
 
   const processPDF = async () => {
     try {
-      const response = await axios.get(`/api/files/${file.filename}`, {
-        responseType: 'arraybuffer',
-      });
+      // Convert data URL to ArrayBuffer
+      const base64Data = file.data.split(',')[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
 
-      const pdfDoc = await PDFDocument.load(response.data);
+      const pdfDoc = await PDFDocument.load(bytes);
       const pages = pdfDoc.getPages();
 
       for (const page of pages) {
@@ -549,20 +554,21 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
       
       const processedFilename = `processed-${file.originalName}`;
       
-      await axios.post(
-        `/api/save-processed?filename=${encodeURIComponent(processedFilename)}&originalName=${encodeURIComponent(file.originalName)}`,
-        blob,
-        {
-          headers: {
-            'Content-Type': 'application/octet-stream',
-          },
-          withCredentials: true,
-        }
-      );
+      // Create download link for client-side download
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = processedFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
       onFileProcessed({
         filename: processedFilename,
         originalName: file.originalName,
+        blob: blob,
+        url: url
       });
     } catch (error) {
       console.error('PDF processing error:', error);
