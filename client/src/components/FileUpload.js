@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { Upload, File, X, AlertCircle } from 'lucide-react';
-import axios from 'axios';
 import './FileUpload.css';
 
 const FileUpload = ({ onFilesUploaded }) => {
@@ -91,24 +90,31 @@ const FileUpload = ({ onFilesUploaded }) => {
     setError('');
 
     try {
-      const formData = new FormData();
-      selectedFiles.forEach(file => {
-        formData.append('files', file);
+      // Process files client-side without server upload
+      const filePromises = selectedFiles.map(async (file) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            resolve({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              originalName: file.name,
+              filename: file.name,
+              mimetype: file.type,
+              size: file.size,
+              data: e.target.result,
+              file: file
+            });
+          };
+          reader.readAsDataURL(file);
+        });
       });
 
-      const response = await axios.post('/api/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        withCredentials: true,
-      });
-
-      if (response.data.success) {
-        onFilesUploaded(response.data.files);
-      }
+      const processedFiles = await Promise.all(filePromises);
+      onFilesUploaded(processedFiles);
+      setSelectedFiles([]);
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err.response?.data?.error || 'Failed to upload files. Please try again.');
+      setError('Failed to process files. Please try again.');
     } finally {
       setUploading(false);
     }

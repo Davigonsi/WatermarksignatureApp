@@ -5,7 +5,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 import SignaturePad from './SignaturePad';
 import WatermarkControls from './WatermarkControls';
 import { Download, SkipForward, Loader, ChevronLeft, ChevronRight } from 'lucide-react';
-import axios from 'axios';
 import './Editor.css';
 
 const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
@@ -70,7 +69,7 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
   const loadImage = async () => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = `/api/files/${file.filename}`;
+    img.src = file.data;
 
     img.onload = () => {
       const maxWidth = 800;
@@ -124,11 +123,15 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
 
   const loadPDFPreview = async () => {
     try {
-      const response = await axios.get(`/api/files/${file.filename}`, {
-        responseType: 'arraybuffer',
-      });
+      // Convert data URL to ArrayBuffer
+      const base64Data = file.data.split(',')[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
 
-      const loadingTask = pdfjsLib.getDocument({ data: response.data });
+      const loadingTask = pdfjsLib.getDocument({ data: bytes });
       const pdf = await loadingTask.promise;
       
       pdfDocRef.current = pdf;
