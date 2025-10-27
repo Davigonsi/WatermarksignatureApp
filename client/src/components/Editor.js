@@ -104,6 +104,11 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
           fabricImg.selectable = false;
           fabricImg.evented = false;
           fabricCanvas.setBackgroundImage(fabricImg, fabricCanvas.renderAll.bind(fabricCanvas));
+          
+          // Set canvas state after background is loaded
+          fabricCanvasRef.current = fabricCanvas;
+          setCanvas(fabricCanvas);
+          setLoading(false);
         });
 
         // Enable object interaction
@@ -115,11 +120,12 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
         // Ensure canvas is interactive
         fabricCanvas.selection = true;
         fabricCanvas.interactive = true;
-
-        fabricCanvasRef.current = fabricCanvas;
-        setCanvas(fabricCanvas);
-        setLoading(false);
       }
+    };
+
+    img.onerror = (error) => {
+      console.error('Error loading image:', error);
+      setLoading(false);
     };
   };
 
