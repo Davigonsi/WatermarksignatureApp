@@ -137,31 +137,49 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
 
   const loadPDFPreview = async () => {
     try {
+      console.log('loadPDFPreview: Starting PDF load');
+      console.log('file.data exists:', !!file.data);
+      
       // Convert data URL to ArrayBuffer
       const base64Data = file.data.split(',')[1];
+      console.log('loadPDFPreview: Base64 data length:', base64Data?.length);
+      
       const binaryString = atob(base64Data);
+      console.log('loadPDFPreview: Binary string length:', binaryString.length);
+      
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
+      console.log('loadPDFPreview: Bytes array created, length:', bytes.length);
 
+      console.log('loadPDFPreview: Loading PDF document...');
       const loadingTask = pdfjsLib.getDocument({ data: bytes });
       const pdf = await loadingTask.promise;
+      console.log('loadPDFPreview: PDF loaded, pages:', pdf.numPages);
       
       pdfDocRef.current = pdf;
       setPdfPageCount(pdf.numPages);
       setCurrentPdfPage(1);
 
+      console.log('loadPDFPreview: Rendering first page...');
       await renderPDFPage(1, pdf);
+      console.log('loadPDFPreview: First page rendered successfully');
     } catch (error) {
       console.error('Error loading PDF:', error);
+      console.error('Error stack:', error.stack);
+      setLoading(false);
     }
   };
 
   const renderPDFPage = async (pageNumber, pdfDocument = null) => {
     try {
+      console.log('renderPDFPage: Starting render for page', pageNumber);
       const pdf = pdfDocument || pdfDocRef.current;
-      if (!pdf) return;
+      if (!pdf) {
+        console.error('renderPDFPage: No PDF document available');
+        return;
+      }
 
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1.5 });
@@ -248,6 +266,12 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
             fabric.Image.fromURL(pdfImage.src, (img) => {
               img.selectable = false;
               fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas));
+              
+              // Set canvas state and stop loading after background is set
+              fabricCanvasRef.current = fabricCanvas;
+              setCanvas(fabricCanvas);
+              setLoading(false);
+              console.log('renderPDFPage: Canvas initialized and loading complete');
             });
           };
 
@@ -255,13 +279,11 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
           fabricCanvas.on('object:moving', () => fabricCanvas.renderAll());
           fabricCanvas.on('object:scaling', () => fabricCanvas.renderAll());
           fabricCanvas.on('object:rotating', () => fabricCanvas.renderAll());
-
-          fabricCanvasRef.current = fabricCanvas;
-          setCanvas(fabricCanvas);
         }
       }
     } catch (error) {
       console.error('Error rendering PDF page:', error);
+      setLoading(false);
     }
   };
 
