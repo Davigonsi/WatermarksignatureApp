@@ -8,6 +8,10 @@ import { Download, SkipForward, Loader, ChevronLeft, ChevronRight } from 'lucide
 import './Editor.css';
 
 const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
+  console.log('Editor component mounted with file:', file);
+  console.log('File has data property:', !!file?.data);
+  console.log('File mimetype:', file?.mimetype);
+  
   const [canvas, setCanvas] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -53,6 +57,14 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
   const initializeCanvas = async () => {
     setLoading(true);
     console.log('Initializing canvas with file:', file);
+    
+    if (!file || !file.data) {
+      console.error('File or file.data is missing!');
+      console.error('File object:', file);
+      setLoading(false);
+      return;
+    }
+    
     const isPdf = file.mimetype === 'application/pdf';
     setIsPDF(isPdf);
 
