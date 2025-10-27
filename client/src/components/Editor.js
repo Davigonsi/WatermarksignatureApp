@@ -52,28 +52,32 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
 
   const initializeCanvas = async () => {
     setLoading(true);
+    console.log('Initializing canvas with file:', file);
     const isPdf = file.mimetype === 'application/pdf';
     setIsPDF(isPdf);
 
     try {
       if (isPdf) {
+        console.log('Loading PDF preview...');
         await loadPDFPreview();
       } else {
+        console.log('Loading image...');
         await loadImage();
       }
     } catch (error) {
       console.error('Error loading file:', error);
-    } finally {
       setLoading(false);
     }
   };
 
   const loadImage = async () => {
+    console.log('loadImage called, file.data:', file.data ? 'exists' : 'missing');
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = file.data;
 
     img.onload = () => {
+      console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
       const maxWidth = 800;
       const maxHeight = 600;
       let width = img.width;
@@ -125,6 +129,8 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
 
     img.onerror = (error) => {
       console.error('Error loading image:', error);
+      console.error('File data type:', typeof file.data);
+      console.error('File data preview:', file.data ? file.data.substring(0, 100) : 'no data');
       setLoading(false);
     };
   };
