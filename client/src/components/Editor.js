@@ -38,14 +38,16 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
     // Set worker path for pdfjs
     pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
     
+    console.log('useEffect triggered for file.id:', file?.id);
     initializeCanvas();
     return () => {
+      console.log('Cleaning up canvas for file.id:', file?.id);
       if (fabricCanvasRef.current) {
         fabricCanvasRef.current.dispose();
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file]);
+  }, [file?.id]);
 
   useEffect(() => {
     if (isPDF && pdfDocRef.current) {
@@ -55,6 +57,12 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
   }, [currentPdfPage, isPDF]);
 
   const initializeCanvas = async () => {
+    // Prevent re-initialization if canvas already exists
+    if (fabricCanvasRef.current) {
+      console.log('Canvas already initialized, skipping re-initialization');
+      return;
+    }
+    
     setLoading(true);
     console.log('Initializing canvas with file:', file);
     
