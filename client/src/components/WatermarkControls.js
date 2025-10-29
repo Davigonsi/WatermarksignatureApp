@@ -1,9 +1,8 @@
 import React, { useRef } from 'react';
-import { Type, Image as ImageIcon, Check, X } from 'lucide-react';
-import axios from 'axios';
+import { Type, Image as ImageIcon, Check, X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
 import './WatermarkControls.css';
 
-const WatermarkControls = ({ settings, onChange, onApply, onRemove, isApplied, onRealtimeUpdate }) => {
+const WatermarkControls = ({ settings, onChange, onApply, onRemove, isApplied, onRealtimeUpdate, onMoveStart, onMoveStop }) => {
   const fileInputRef = useRef(null);
 
   const handleChange = (field, value) => {
@@ -17,29 +16,20 @@ const WatermarkControls = ({ settings, onChange, onApply, onRemove, isApplied, o
     }
   };
 
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    try {
-      const formData = new FormData();
-      formData.append('watermark', file);
-
-      const response = await axios.post('/api/upload-watermark', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        withCredentials: true,
-      });
-
-      if (response.data.success) {
-        const imageUrl = `/api/files/${response.data.filename}`;
-        handleChange('imageUrl', imageUrl);
-      }
-    } catch (error) {
-      console.error('Watermark upload error:', error);
-      alert('Failed to upload watermark image');
-    }
+    // Read file as data URL for client-side processing
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      handleChange('imageUrl', event.target.result);
+    };
+    reader.onerror = (error) => {
+      console.error('Error reading watermark image:', error);
+      alert('Failed to load watermark image');
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -149,6 +139,54 @@ const WatermarkControls = ({ settings, onChange, onApply, onRemove, isApplied, o
         />
       </div>
 
+      {isApplied && onMoveStart && onMoveStop && (
+        <div className="control-group">
+          <label>Position</label>
+          <div className="position-controls">
+            <div className="position-row">
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('up')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Up (Hold to move continuously)"
+              >
+                <ArrowUp size={20} />
+              </button>
+            </div>
+            <div className="position-row">
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('left')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Left (Hold to move continuously)"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('down')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Down (Hold to move continuously)"
+              >
+                <ArrowDown size={20} />
+              </button>
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('right')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Right (Hold to move continuously)"
+              >
+                <ArrowRight size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="watermark-action-buttons">
         <button className="apply-watermark-btn" onClick={onApply}>
           <Check size={18} />
@@ -164,7 +202,7 @@ const WatermarkControls = ({ settings, onChange, onApply, onRemove, isApplied, o
 
       <div className="control-group">
         <div className="info-box">
-          <p>💡 <strong>Tip:</strong> Click and drag the watermark on the canvas to position it anywhere. Use the corner handles to resize and rotate.</p>
+          <p>💡 <strong>Tip:</strong> Use the arrow buttons above to position the watermark precisely on your document.</p>
         </div>
       </div>
     </div>

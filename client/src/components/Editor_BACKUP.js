@@ -8,6 +8,10 @@ import { Download, SkipForward, Loader, ChevronLeft, ChevronRight } from 'lucide
 import './Editor.css';
 
 const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
+  console.log('Editor component mounted with file:', file);
+  console.log('File has data property:', !!file?.data);
+  console.log('File mimetype:', file?.mimetype);
+  
   const [canvas, setCanvas] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -32,46 +36,86 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
 
   useEffect(() => {
     // Set worker path for pdfjs
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
     
+    console.log('useEffect triggered for file.id:', file?.id);
     initializeCanvas();
     return () => {
+      console.log('Cleaning up canvas for file.id:', file?.id);
       if (fabricCanvasRef.current) {
         fabricCanvasRef.current.dispose();
       }
     };
-  }, [file]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file?.id]);
 
   useEffect(() => {
     if (isPDF && pdfDocRef.current) {
       renderPDFPage(currentPdfPage);
     }
-  }, [currentPdfPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPdfPage, isPDF]);
 
   const initializeCanvas = async () => {
+    // Cleanup existing canvas before re-initialization
+    if (fabricCanvasRef.current) {
+      console.log('Disposing existing canvas before re-initialization');
+      fabricCanvasRef.current.dispose();
+      fabricCanvasRef.current = null;
+      setCanvas(null);
+    }
+    
     setLoading(true);
+    setWatermarkApplied(false);
+    setSignatureApplied(false);
+    console.log('Initializing canvas with file:', file);
+    
+    if (!file || !file.data) {
+      console.error('File or file.data is missing!');
+      console.error('File object:', file);
+      setLoading(false);
+      return;
+    }
+    
     const isPdf = file.mimetype === 'application/pdf';
     setIsPDF(isPdf);
 
     try {
       if (isPdf) {
+        console.log('Loading PDF preview...');
         await loadPDFPreview();
       } else {
+        console.log('Loading image...');
         await loadImage();
       }
     } catch (error) {
       console.error('Error loading file:', error);
-    } finally {
       setLoading(false);
     }
   };
 
   const loadImage = async () => {
+    console.log('loadImage called, file.data:', file.data ? 'exists' : 'missing');
+    
+    if (!file.data) {
+      console.error('No file data available');
+      setLoading(false);
+      return;
+    }
+    
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = file.data; // Use file.data instead of API endpoint
+    img.src = file.data;
 
     img.onload = () => {
+      console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
+      
+      if (!canvasRef.current) {
+        console.error('Canvas ref is not available');
+        setLoading(false);
+        return;
+      }
+      
       const maxWidth = 800;
       const maxHeight = 600;
       let width = img.width;
@@ -86,7 +130,7 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
         height = maxHeight;
       }
 
-      if (canvasRef.current) {
+      try {
         const fabricCanvas = new fabric.Canvas(canvasRef.current, {
           width: width,
           height: height,
@@ -94,60 +138,122 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
           preserveObjectStacking: true,
           interactive: true,
           allowTouchScrolling: false,
+          renderOnAddRemove: true,
+          enableRetinaScaling: false,
         });
 
         fabric.Image.fromURL(img.src, (fabricImg) => {
+          if (!fabricImg) {
+            console.error('Failed to create fabric image');
+            setLoading(false);
+            return;
+          }
+          
           fabricImg.scaleToWidth(width);
           fabricImg.scaleToHeight(height);
           fabricImg.selectable = false;
           fabricImg.evented = false;
-          fabricCanvas.setBackgroundImage(fabricImg, fabricCanvas.renderAll.bind(fabricCanvas));
-        });
+          fabricCanvas.setBackgroundImage(fabricImg, () => {
+            fabricCanvas.renderAll();
+            
+            // Set canvas state after background is loaded
+            fabricCanvasRef.current = fabricCanvas;
+            setCanvas(fabricCanvas);
+            setLoading(false);
+            console.log('Image canvas initialized successfully');
+          });
+        }, { crossOrigin: 'anonymous' });
 
-        // Enable object interaction
+        // Enable object interaction events
         fabricCanvas.on('object:moving', () => fabricCanvas.renderAll());
         fabricCanvas.on('object:scaling', () => fabricCanvas.renderAll());
         fabricCanvas.on('object:rotating', () => fabricCanvas.renderAll());
         fabricCanvas.on('object:modified', () => fabricCanvas.renderAll());
-
-        // Ensure canvas is interactive
-        fabricCanvas.selection = true;
-        fabricCanvas.interactive = true;
-
-        fabricCanvasRef.current = fabricCanvas;
-        setCanvas(fabricCanvas);
+        fabricCanvas.on('selection:created', (e) => {
+          console.log('Selection created:', e.selected[0]?.name);
+          fabricCanvas.renderAll();
+        });
+        fabricCanvas.on('selection:updated', (e) => {
+          console.log('Selection updated:', e.selected[0]?.name);
+          fabricCanvas.renderAll();
+        });
+        fabricCanvas.on('mouse:down', (e) => {
+          console.log('Mouse down on canvas, target:', e.target?.name || 'background');
+        });
+      } catch (error) {
+        console.error('Error creating fabric canvas:', error);
         setLoading(false);
       }
+    };
+
+    img.onerror = (error) => {
+      console.error('Error loading image:', error);
+      console.error('File data type:', typeof file.data);
+      console.error('File data preview:', file.data ? file.data.substring(0, 100) : 'no data');
+      setLoading(false);
     };
   };
 
   const loadPDFPreview = async () => {
     try {
+      console.log('loadPDFPreview: Starting PDF load');
+      console.log('file.data exists:', !!file.data);
+      
+      if (!file.data) {
+        console.error('loadPDFPreview: No file data available');
+        setLoading(false);
+        return;
+      }
+      
       // Convert data URL to ArrayBuffer
       const base64Data = file.data.split(',')[1];
+      console.log('loadPDFPreview: Base64 data length:', base64Data?.length);
+      
+      if (!base64Data) {
+        console.error('loadPDFPreview: Failed to extract base64 data');
+        setLoading(false);
+        return;
+      }
+      
       const binaryString = atob(base64Data);
+      console.log('loadPDFPreview: Binary string length:', binaryString.length);
+      
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
+      console.log('loadPDFPreview: Bytes array created, length:', bytes.length);
 
+      console.log('loadPDFPreview: Loading PDF document...');
       const loadingTask = pdfjsLib.getDocument({ data: bytes });
       const pdf = await loadingTask.promise;
+      console.log('loadPDFPreview: PDF loaded, pages:', pdf.numPages);
       
       pdfDocRef.current = pdf;
       setPdfPageCount(pdf.numPages);
       setCurrentPdfPage(1);
 
+      console.log('loadPDFPreview: Rendering first page...');
       await renderPDFPage(1, pdf);
+      console.log('loadPDFPreview: First page rendered successfully');
     } catch (error) {
       console.error('Error loading PDF:', error);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      alert(`Failed to load PDF: ${error.message}. Please try a different file.`);
+      setLoading(false);
     }
   };
 
   const renderPDFPage = async (pageNumber, pdfDocument = null) => {
     try {
+      console.log('renderPDFPage: Starting render for page', pageNumber);
       const pdf = pdfDocument || pdfDocRef.current;
-      if (!pdf) return;
+      if (!pdf) {
+        console.error('renderPDFPage: No PDF document available');
+        return;
+      }
 
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1.5 });
@@ -179,13 +285,19 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
       }).promise;
 
       // Create or update fabric canvas
+      if (!canvasRef.current) {
+        console.error('renderPDFPage: Canvas ref is not available');
+        setLoading(false);
+        return;
+      }
+      
       if (canvasRef.current) {
         // Dispose existing canvas if changing pages
         if (fabricCanvasRef.current && pdfDocument === null) {
-          // Save existing watermarks and signatures
+          // Save existing watermarks and signatures with their properties
           const existingObjects = fabricCanvasRef.current.getObjects().filter(
             obj => obj.name === 'watermark' || obj.name === 'signature'
-          );
+          ).map(obj => obj.toObject(['name']));
           
           fabricCanvasRef.current.dispose();
           
@@ -194,6 +306,9 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
             height: scaledViewport.height,
             selection: true,
             preserveObjectStacking: true,
+            interactive: true,
+            renderOnAddRemove: true,
+            enableRetinaScaling: false,
           });
 
           // Set PDF page as background
@@ -202,20 +317,34 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
           pdfImage.onload = () => {
             fabric.Image.fromURL(pdfImage.src, (img) => {
               img.selectable = false;
-              fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas));
-              
-              // Re-add watermarks and signatures
-              existingObjects.forEach(obj => {
-                fabricCanvas.add(obj);
+              img.evented = false;
+              fabricCanvas.setBackgroundImage(img, () => {
+                fabricCanvas.renderAll();
+                
+                // Re-add watermarks and signatures from saved data
+                existingObjects.forEach(objData => {
+                  fabric.util.enlivenObjects([objData], (objects) => {
+                    objects.forEach(obj => {
+                      obj.selectable = true;
+                      obj.evented = true;
+                      obj.hasControls = true;
+                      obj.hasBorders = true;
+                      fabricCanvas.add(obj);
+                    });
+                    fabricCanvas.renderAll();
+                  });
+                });
               });
-              fabricCanvas.renderAll();
             });
           };
 
-          // Enable object interaction
+          // Enable object interaction events
           fabricCanvas.on('object:moving', () => fabricCanvas.renderAll());
           fabricCanvas.on('object:scaling', () => fabricCanvas.renderAll());
           fabricCanvas.on('object:rotating', () => fabricCanvas.renderAll());
+          fabricCanvas.on('object:modified', () => fabricCanvas.renderAll());
+          fabricCanvas.on('selection:created', () => fabricCanvas.renderAll());
+          fabricCanvas.on('selection:updated', () => fabricCanvas.renderAll());
 
           fabricCanvasRef.current = fabricCanvas;
           setCanvas(fabricCanvas);
@@ -226,6 +355,9 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
             height: scaledViewport.height,
             selection: true,
             preserveObjectStacking: true,
+            interactive: true,
+            renderOnAddRemove: true,
+            enableRetinaScaling: false,
           });
 
           const pdfImage = new Image();
@@ -233,21 +365,32 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
           pdfImage.onload = () => {
             fabric.Image.fromURL(pdfImage.src, (img) => {
               img.selectable = false;
-              fabricCanvas.setBackgroundImage(img, fabricCanvas.renderAll.bind(fabricCanvas));
+              img.evented = false;
+              fabricCanvas.setBackgroundImage(img, () => {
+                fabricCanvas.renderAll();
+                
+                // Set canvas state and stop loading after background is set
+                fabricCanvasRef.current = fabricCanvas;
+                setCanvas(fabricCanvas);
+                setLoading(false);
+                console.log('renderPDFPage: Canvas initialized and loading complete');
+              });
             });
           };
 
-          // Enable object interaction
+          // Enable object interaction events
           fabricCanvas.on('object:moving', () => fabricCanvas.renderAll());
           fabricCanvas.on('object:scaling', () => fabricCanvas.renderAll());
           fabricCanvas.on('object:rotating', () => fabricCanvas.renderAll());
-
-          fabricCanvasRef.current = fabricCanvas;
-          setCanvas(fabricCanvas);
+          fabricCanvas.on('object:modified', () => fabricCanvas.renderAll());
+          fabricCanvas.on('selection:created', () => fabricCanvas.renderAll());
+          fabricCanvas.on('selection:updated', () => fabricCanvas.renderAll());
         }
       }
     } catch (error) {
       console.error('Error rendering PDF page:', error);
+      console.error('Error details:', error.message);
+      setLoading(false);
     }
   };
 
@@ -283,8 +426,15 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
       });
 
       canvas.add(text);
-      canvas.setActiveObject(text);
       canvas.renderAll();
+      
+      // Use setTimeout to ensure object is fully added before selecting
+      setTimeout(() => {
+        canvas.setActiveObject(text);
+        canvas.renderAll();
+        console.log('Text watermark selected after render');
+      }, 50);
+      
       setWatermarkApplied(true);
       console.log('Text watermark added and selected');
     } else if (watermarkSettings.type === 'image' && watermarkSettings.imageUrl) {
@@ -304,8 +454,15 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
         img.hoverCursor = 'move';
         img.moveCursor = 'move';
         canvas.add(img);
-        canvas.setActiveObject(img);
         canvas.renderAll();
+        
+        // Use setTimeout to ensure object is fully added before selecting
+        setTimeout(() => {
+          canvas.setActiveObject(img);
+          canvas.renderAll();
+          console.log('Image watermark selected after render');
+        }, 50);
+        
         setWatermarkApplied(true);
         console.log('Image watermark added and selected');
       });
@@ -348,7 +505,14 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
   };
 
   const applySignature = () => {
-    if (!canvas || !signatureData) return;
+    if (!canvas || !signatureData) {
+      console.error('Cannot apply signature - canvas or signatureData missing');
+      return;
+    }
+
+    console.log('Applying signature...');
+    console.log('Canvas interactive:', canvas.interactive);
+    console.log('Canvas selection enabled:', canvas.selection);
 
     // Remove existing signature
     const objects = canvas.getObjects();
@@ -359,6 +523,11 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
     });
 
     fabric.Image.fromURL(signatureData, (img) => {
+      if (!img) {
+        console.error('Failed to create signature image');
+        return;
+      }
+
       img.scaleToWidth(200);
       img.name = 'signature';
       img.left = canvas.width - 220;
@@ -367,14 +536,31 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
       img.evented = true;
       img.hasControls = true;
       img.hasBorders = true;
+      img.lockUniScaling = false;
       img.hoverCursor = 'move';
       img.moveCursor = 'move';
+      
       canvas.add(img);
-      canvas.setActiveObject(img);
       canvas.renderAll();
+      
+      // Use setTimeout to ensure object is fully added before selecting
+      setTimeout(() => {
+        canvas.setActiveObject(img);
+        canvas.renderAll();
+        console.log('Signature selected after render');
+        console.log('Active object after timeout:', canvas.getActiveObject()?.name);
+      }, 50);
+      
       setSignatureApplied(true);
-      console.log('Signature added and selected');
-    });
+      
+      console.log('Signature added successfully');
+      console.log('Signature properties:', {
+        selectable: img.selectable,
+        evented: img.evented,
+        hasControls: img.hasControls,
+        hasBorders: img.hasBorders
+      });
+    }, { crossOrigin: 'anonymous' });
   };
 
   const removeSignature = () => {
@@ -391,106 +577,7 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
     setSignatureData(null);
   };
 
-  const moveIntervalRef = useRef(null);
 
-  const moveWatermark = (direction) => {
-    if (!canvas || !watermarkApplied) return;
-
-    const objects = canvas.getObjects();
-    const watermark = objects.find(obj => obj.name === 'watermark');
-    
-    if (watermark) {
-      const moveAmount = 5; // pixels to move per step
-      
-      switch(direction) {
-        case 'up':
-          watermark.set('top', watermark.top - moveAmount);
-          break;
-        case 'down':
-          watermark.set('top', watermark.top + moveAmount);
-          break;
-        case 'left':
-          watermark.set('left', watermark.left - moveAmount);
-          break;
-        case 'right':
-          watermark.set('left', watermark.left + moveAmount);
-          break;
-        default:
-          break;
-      }
-      
-      watermark.setCoords();
-      canvas.renderAll();
-    }
-  };
-
-  const startMovingWatermark = (direction) => {
-    // Clear any existing interval
-    if (moveIntervalRef.current) {
-      clearInterval(moveIntervalRef.current);
-    }
-    
-    // Move immediately
-    moveWatermark(direction);
-    
-    // Then continue moving while held
-    moveIntervalRef.current = setInterval(() => {
-      moveWatermark(direction);
-    }, 50); // Move every 50ms
-  };
-
-  const stopMoving = () => {
-    if (moveIntervalRef.current) {
-      clearInterval(moveIntervalRef.current);
-      moveIntervalRef.current = null;
-    }
-  };
-
-  const moveSignature = (direction) => {
-    if (!canvas || !signatureApplied) return;
-
-    const objects = canvas.getObjects();
-    const signature = objects.find(obj => obj.name === 'signature');
-    
-    if (signature) {
-      const moveAmount = 5; // pixels to move per step
-      
-      switch(direction) {
-        case 'up':
-          signature.set('top', signature.top - moveAmount);
-          break;
-        case 'down':
-          signature.set('top', signature.top + moveAmount);
-          break;
-        case 'left':
-          signature.set('left', signature.left - moveAmount);
-          break;
-        case 'right':
-          signature.set('left', signature.left + moveAmount);
-          break;
-        default:
-          break;
-      }
-      
-      signature.setCoords();
-      canvas.renderAll();
-    }
-  };
-
-  const startMovingSignature = (direction) => {
-    // Clear any existing interval
-    if (moveIntervalRef.current) {
-      clearInterval(moveIntervalRef.current);
-    }
-    
-    // Move immediately
-    moveSignature(direction);
-    
-    // Then continue moving while held
-    moveIntervalRef.current = setInterval(() => {
-      moveSignature(direction);
-    }, 50); // Move every 50ms
-  };
 
   const handleProcess = async () => {
     setProcessing(true);
@@ -515,7 +602,7 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
     
     const processedFilename = `processed-${file.originalName}`;
     
-    // Download directly
+    // Create download link for client-side download
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -528,6 +615,8 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
     onFileProcessed({
       filename: processedFilename,
       originalName: file.originalName,
+      blob: blob,
+      url: url
     });
   };
 
@@ -617,7 +706,7 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
       
       const processedFilename = `processed-${file.originalName}`;
       
-      // Download directly
+      // Create download link for client-side download
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -630,6 +719,8 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
       onFileProcessed({
         filename: processedFilename,
         originalName: file.originalName,
+        blob: blob,
+        url: url
       });
     } catch (error) {
       console.error('PDF processing error:', error);
@@ -714,8 +805,6 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
             onRemove={removeWatermark}
             isApplied={watermarkApplied}
             onRealtimeUpdate={updateWatermarkRealtime}
-            onMoveStart={startMovingWatermark}
-            onMoveStop={stopMoving}
           />
           
           <SignaturePad
@@ -723,8 +812,6 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
             onApply={applySignature}
             onRemove={removeSignature}
             isApplied={signatureApplied}
-            onMoveStart={startMovingSignature}
-            onMoveStop={stopMoving}
           />
         </div>
       </div>

@@ -1,9 +1,9 @@
 import React, { useRef, useState } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
-import { Pen, Eraser, Upload, Check, X } from 'lucide-react';
+import { Pen, Eraser, Upload, Check, X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
 import './SignaturePad.css';
 
-const SignaturePad = ({ onSignatureChange, onApply, onRemove, isApplied }) => {
+const SignaturePad = ({ onSignatureChange, onApply, onRemove, isApplied, onMoveStart, onMoveStop }) => {
   const sigPadRef = useRef(null);
   const fileInputRef = useRef(null);
   const [signatureMethod, setSignatureMethod] = useState('draw'); // draw or upload
@@ -118,6 +118,54 @@ const SignaturePad = ({ onSignatureChange, onApply, onRemove, isApplied }) => {
         </div>
       )}
 
+      {isApplied && onMoveStart && onMoveStop && (
+        <div className="position-control-group">
+          <label>Position</label>
+          <div className="position-controls">
+            <div className="position-row">
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('up')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Up (Hold to move continuously)"
+              >
+                <ArrowUp size={20} />
+              </button>
+            </div>
+            <div className="position-row">
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('left')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Left (Hold to move continuously)"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('down')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Down (Hold to move continuously)"
+              >
+                <ArrowDown size={20} />
+              </button>
+              <button 
+                className="position-btn" 
+                onMouseDown={() => onMoveStart('right')}
+                onMouseUp={onMoveStop}
+                onMouseLeave={onMoveStop}
+                title="Move Right (Hold to move continuously)"
+              >
+                <ArrowRight size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="signature-action-buttons">
         <button className="apply-signature-btn" onClick={handleApply}>
           <Check size={18} />
@@ -132,7 +180,7 @@ const SignaturePad = ({ onSignatureChange, onApply, onRemove, isApplied }) => {
       </div>
 
       <div className="info-box">
-        <p>💡 <strong>Tip:</strong> After applying, drag the signature on the canvas to reposition it. Use corner handles to resize.</p>
+        <p>💡 <strong>Tip:</strong> Use the arrow buttons above to position the signature precisely on your document.</p>
       </div>
     </div>
   );
