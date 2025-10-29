@@ -40,12 +40,14 @@ const Editor = ({ file, fileIndex, totalFiles, onFileProcessed, onSkip }) => {
         fabricCanvasRef.current.dispose();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
   useEffect(() => {
     if (isPDF && pdfDocRef.current) {
       renderPDFPage(currentPdfPage);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPdfPage]);
 
   const initializeCanvas = async () => {
